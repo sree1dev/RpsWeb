@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rock Paper Scissor with AI</title>
+    <style>
+        body {
+            background-color: #000;
+            color: #fff;
+            font-family: 'Arial', sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            flex-direction: column;
+            text-align: center;
+            overflow: hidden;
+            position: relative;
+        }
+        .container {
+            max-width: 600px;
+            padding: 20px;
+            border: 2px solid #fff;
+            border-radius: 12px;
+            background-color: #111;
+            box-shadow: 0 4px 12px rgba(255, 255, 255, 0.2);
+            position: relative;
+            z-index: 10;
+        }
+        h1 {
+            font-size: 2.5em;
+            margin-bottom: 20px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            text-shadow: 0 2px 4px rgba(255, 255, 255, 0.3);
+        }
+        .game-controls {
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        .btn {
+            background-color: #fff;
+            color: #000;
+            border: none;
+            padding: 12px 24px;
+            font-size: 1.2em;
+            cursor: pointer;
+            border-radius: 8px;
+            transition: background-color 0.3s, transform 0.1s, box-shadow 0.2s;
+            box-shadow: 0 2px 6px rgba(255, 255, 255, 0.3);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .btn:hover {
+            background-color: #e0e0e0;
+            box-shadow: 0 4px 10px rgba(255, 255, 255, 0.4);
+            transform: translateY(-2px);
+        }
+        .btn:active {
+            transform: scale(0.95);
+        }
+        .btn:disabled {
+            background-color: #555;
+            color: #888;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+        #timer {
+            font-size: 1.8em;
+            margin-bottom: 20px;
+            color: #ff4d4d;
+            text-shadow: 0 1px 3px rgba(255, 255, 255, 0.2);
+            transition: opacity 0.3s ease-in-out;
+            opacity: 1;
+        }
+        #timer.fade {
+            opacity: 0.5;
+        }
+        #game-status {
+            font-size: 1.2em;
+            margin: 20px 0;
+            min-height: 100px;
+            line-height: 1.5;
+        }
+        #score {
+            font-size: 1.5em;
+            margin-bottom: 20px;
+            letter-spacing: 1px;
+        }
+        #patterns {
+            font-size: 1em;
+            margin-top: 20px;
+            white-space: pre-wrap;
+            text-align: left;
+            background-color: #222;
+            padding: 12px;
+            border-radius: 8px;
+            box-shadow: 0 2px 6px rgba(255, 255, 255, 0.2);
+        }
+        .balloon {
+            position: absolute;
+            width: 50px;
+            height: 70px;
+            background-color: #fff;
+            border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%;
+            animation: float 6s ease-in-out infinite;
+            z-index: 5;
+            box-shadow: 0 2px 6px rgba(255, 255, 255, 0.3);
+        }
+        .balloon::after {
+            content: '';
+            position: absolute;
+            bottom: -10px;
+            left: 50%;
+            width: 0;
+            height: 0;
+            border-left: 5px solid transparent;
+            border-right: 5px solid transparent;
+            border-top: 10px solid #fff;
+            transform: translateX(-50%);
+        }
+        @keyframes float {
+            0%, 100% { transform: translateY(0) rotate(0deg); }
+            50% { transform: translateY(-100vh) rotate(10deg); }
+        }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Rock Paper Scissor with AI</h1>
+        <div id="timer">3</div>
+        <div class="game-controls">
+            <button class="btn" id="rock-btn" onclick="playMove('R')"><span>✊</span>Rock</button>
+            <button class="btn" id="paper-btn" onclick="playMove('P')"><span>✋</span>Paper</button>
+            <button class="btn" id="scissors-btn" onclick="playMove('S')"><span>✌️</span>Scissors</button>
+            <button class="btn" id="quit-btn" onclick="quitGame()">Quit</button>
+            <button class="btn hidden" id="play-again-btn" onclick="resetGame()">Play Again</button>
+        </div>
+        <div id="game-status">Choose ✊, ✋, or ✌️ within 3 seconds!</div>
+        <div id="score">You: 0 | AI: 0 | Round: 0/15</div>
+        <div id="patterns"></div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <script>
+        class RPS_AI {
+            constructor(history_length = 2, alpha = 0.1, gamma = 0.9, epsilon = 0.1, freq_bias_weight = 0.15,
+                        penalty_scale = 2.0, reward_scale = 5.0, loss_scale = -5.0) {
+                this.history_length = history_length;
+                this.actions = ['R', 'P', 'S'];
+                this.alpha = alpha;
+                this.gamma = gamma;
+                this.epsilon = epsilon;
+                this.freq_bias_weight = freq_bias_weight;
+                this.penalty_scale = penalty_scale;
+                this.reward_scale = reward_scale;
+                this.loss_scale = loss_scale;
+                this.q_table = {};
+                this.history = [];
+                this.move_counts = { 'R': 0, 'P': 0, 'S': 0 };
+                this.current_round = 0;
+                this.ai_score = 0;
+                this.player_score = 0;
+                this.new_states_visited = 0;
+            }
+
+            get_state() {
+                if (this.history.length < this.history_length * 2) {
+                    return Array(this.history_length * 2).fill('-').join('');
+                }
+                return this.history.slice(-this.history_length * 2).join('');
+            }
+
+            is_win_guaranteed() {
+                const remaining_rounds = 15 - this.current_round;
+                const score_lead = this.ai_score - this.player_score;
+                return score_lead > remaining_rounds + 1;
+            }
+
+            is_loss_guaranteed() {
+                const remaining_rounds = 15 - this.current_round;
+                const score_deficit = this.player_score - this.ai_score;
+                return score_deficit > remaining_rounds + 1;
+            }
+
+            determine_winner(player_move, ai_move) {
+                if (player_move === ai_move) {
+                    return ['Tie', 0.0];
+                } else if (
+                    (player_move === 'R' && ai_move === 'S') ||
+                    (player_move === 'P' && ai_move === 'R') ||
+                    (player_move === 'S' && ai_move === 'P')
+                ) {
+                    return ['Player', this.loss_scale];
+                } else {
+                    return ['AI', this.reward_scale];
+                }
+            }
+
+            choose_action(state, high_level_strategy = 'exploit') {
+                const temp_epsilon = (high_level_strategy === 'explore' || this.is_win_guaranteed())
+                    ? Math.min(this.epsilon + 0.5, 0.8)
+                    : this.epsilon;
+                const temp_freq_bias_weight = this.freq_bias_weight;
+
+                if (Math.random() < temp_epsilon) {
+                    return this.actions[Math.floor(Math.random() * this.actions.length)];
+                }
+
+                if (!this.q_table[state]) {
+                    this.q_table[state] = Array(this.actions.length).fill(0);
+                }
+                let q_values = [...this.q_table[state]];
+                const total_moves = Object.values(this.move_counts).reduce((a, b) => a + b, 0) + 1e-10;
+                const freq_bias = {
+                    'R': this.move_counts['S'] / total_moves,
+                    'P': this.move_counts['R'] / total_moves,
+                    'S': this.move_counts['P'] / total_moves
+                };
+                for (let i = 0; i < this.actions.length; i++) {
+                    q_values[i] += temp_freq_bias_weight * freq_bias[this.actions[i]] * 2.0;
+                }
+                const maxQ = Math.max(...q_values);
+                const maxIndices = q_values.map((q, i) => q === maxQ ? i : -1).filter(i => i !== -1);
+                return this.actions[maxIndices[Math.floor(Math.random() * maxIndices.length)]];
+            }
+
+            update_q_table(state, action, reward, next_state) {
+                if (!this.q_table[state]) {
+                    this.q_table[state] = Array(this.actions.length).fill(0);
+                    this.new_states_visited++;
+                }
+                const action_idx = this.actions.indexOf(action);
+                const current_q = this.q_table[state][action_idx];
+                const next_q = this.q_table[next_state]
+                    ? Math.max(...this.q_table[next_state])
+                    : 0;
+                this.q_table[state][action_idx] = current_q + this.alpha * (reward + this.gamma * next_q - current_q);
+            }
+
+            play_round(player_move, high_level_strategy = 'exploit', play_time) {
+                this.current_round++;
+                const state = this.get_state();
+                this.move_counts[player_move]++;
+                const ai_move = this.choose_action(state, high_level_strategy);
+                const [winner, reward] = this.determine_winner(player_move, ai_move);
+                this.history.push(player_move, ai_move);
+                const next_state = this.get_state();
+                const is_safe_mode = this.is_win_guaranteed();
+                const is_aggressive_mode = this.is_loss_guaranteed();
+                let adjusted_reward = reward;
+
+                if (is_aggressive_mode) {
+                    adjusted_reward = winner === 'AI' ? 10.0 : -10.0;
+                    this.freq_bias_weight = Math.min(this.freq_bias_weight + 0.1, 0.4);
+                } else if (is_safe_mode) {
+                    adjusted_reward = winner === 'AI' ? 5.0 : -5.0;
+                    this.freq_bias_weight = Math.max(0.1, this.freq_bias_weight);
+                    adjusted_reward += 0.1 * this.new_states_visited;
+                } else if (high_level_strategy === 'explore') {
+                    adjusted_reward += 0.1 * this.new_states_visited;
+                }
+
+                this.update_q_table(state, ai_move, adjusted_reward, next_state);
+
+                if (winner === 'Player') {
+                    this.player_score++;
+                } else if (winner === 'AI') {
+                    this.ai_score++;
+                }
+
+                return { ai_move, winner, is_safe_mode, is_aggressive_mode, play_time };
+            }
+
+            reset() {
+                this.player_score = 0;
+                this.ai_score = 0;
+                this.current_round = 0;
+                this.history = [];
+                this.new_states_visited = 0;
+                this.move_counts = { 'R': 0, 'P': 0, 'S': 0 };
+            }
+        }
+
+        const ai = new RPS_AI();
+        let player_moves = [];
+        let ai_moves = [];
+        let game_active = true;
+        let timerInterval = null;
+        let player_move_time = null;
+        let player_move_pending = null;
+        const move_to_emoji = { 'R': '✊', 'P': '✋', 'S': '✌️' };
+        const MIN_HUMAN_REACTION_TIME = 100; // 100ms, faster than typical human reaction (~200ms)
+        const GO_DISPLAY_DURATION = 300; // 300ms for "GO" when no move
+        const BREATHING_SPACE = 2000; // 2 seconds for "GO" when move is played
+
+        function startTimer() {
+            let timeLeft = 3;
+            const timerDisplay = document.getElementById('timer');
+            clearInterval(timerInterval);
+            timerDisplay.innerText = timeLeft;
+            timerDisplay.classList.remove('fade');
+            player_move_time = null;
+            player_move_pending = null;
+
+            let startTime = performance.now();
+            timerInterval = setInterval(() => {
+                let elapsed = (performance.now() - startTime) / 1000;
+                let currentCount = Math.floor(3 - elapsed);
+                let nextDisplay = currentCount >= 1 ? currentCount : 'GO';
+
+                if (timerDisplay.innerText !== nextDisplay.toString()) {
+                    timerDisplay.classList.add('fade');
+                    setTimeout(() => {
+                        timerDisplay.innerText = nextDisplay;
+                        timerDisplay.classList.remove('fade');
+                    }, 300); // Match CSS transition duration
+                }
+
+                if (elapsed >= 3 && timerDisplay.innerText === 'GO') {
+                    clearInterval(timerInterval);
+                    setTimeout(() => handleRoundEnd(), GO_DISPLAY_DURATION);
+                }
+            }, 50); // Higher frequency for precise timing
+        }
+
+        function handleRoundEnd() {
+            const ai_play_time = performance.now();
+
+            if (!player_move_pending) {
+                updateUI('Foul: No move made!\nChoose ✊, ✋, or ✌️ within 3 seconds!', false);
+                setTimeout(startTimer, GO_DISPLAY_DURATION);
+                return;
+            }
+
+            // Check for cheating: human move too close to or after AI move
+            if (player_move_time > ai_play_time || (ai_play_time - player_move_time) < MIN_HUMAN_REACTION_TIME) {
+                updateUI('Foul: Move timing suspicious!\nChoose ✊, ✋, or ✌️ within 3 seconds!', false);
+                setTimeout(startTimer, GO_DISPLAY_DURATION);
+                return;
+            }
+
+            // Check if human move is within 1 seconds before timer end
+            const timer_end_time = ai_play_time - GO_DISPLAY_DURATION; // Adjust for display delay
+            if (Math.abs(timer_end_time - player_move_time) > 1000) {
+                updateUI('Foul: Move not made within 1 seconds of timer end!\nChoose ✊, ✋, or ✌️ within 3 seconds!', false);
+                setTimeout(startTimer, GO_DISPLAY_DURATION);
+                return;
+            }
+
+            const player_move = player_move_pending;
+            player_moves.push(player_move);
+            const { ai_move, winner, is_safe_mode, is_aggressive_mode } = ai.play_round(player_move, 'exploit', ai_play_time);
+            ai_moves.push(ai_move);
+
+            let message = `You played: ${move_to_emoji[player_move]}\nAI played: ${move_to_emoji[ai_move]}\nResult: ${winner}`;
+            if (is_safe_mode) message += '\nNote: AI in Safe Learning Mode.';
+            if (is_aggressive_mode) message += '\nNote: AI in Aggressive Mode.';
+            updateUI(message);
+
+            if (ai.current_round < 15) {
+                setTimeout(startTimer, BREATHING_SPACE); // 2-second breathing space
+            }
+        }
+
+        function updateUI(message, updateScore = true) {
+            document.getElementById('game-status').innerText = message;
+            if (updateScore) {
+                document.getElementById('score').innerText = `You: ${ai.player_score} | AI: ${ai.ai_score} | Round: ${ai.current_round}/15`;
+            }
+            if (ai.current_round >= 15) {
+                const winner = ai.player_score > ai.ai_score ? 'Player' : ai.ai_score > ai.ai_score ? 'AI' : 'Tie';
+                document.getElementById('game-status').innerText = `Game Over! Final Score - You: ${ai.player_score}, AI: ${ai.ai_score}\nWinner: ${winner}`;
+                document.getElementById('patterns').innerText = `Human Pattern: ${player_moves.map(m => move_to_emoji[m]).join(' ')}\nAI Pattern: ${ai_moves.map(m => move_to_emoji[m]).join(' ')}`;
+                toggleButtons(false);
+                document.getElementById('play-again-btn').classList.remove('hidden');
+                game_active = false;
+                clearInterval(timerInterval);
+                if (winner === 'Player') {
+                    triggerCelebration();
+                }
+            }
+        }
+
+        function toggleButtons(enabled) {
+            document.getElementById('rock-btn').disabled = !enabled;
+            document.getElementById('paper-btn').disabled = !enabled;
+            document.getElementById('scissors-btn').disabled = !enabled;
+            document.getElementById('quit-btn').disabled = !enabled;
+        }
+
+        function playMove(player_move) {
+            if (!game_active || ai.current_round >= 15) return;
+            player_move_pending = player_move;
+            player_move_time = performance.now();
+        }
+
+        function quitGame() {
+            if (!game_active) return;
+            clearInterval(timerInterval);
+            updateUI('Game ended. Thanks for playing!', false);
+            document.getElementById('patterns').innerText = `Human Pattern: ${player_moves.map(m => move_to_emoji[m]).join(' ')}\nAI Pattern: ${ai_moves.map(m => move_to_emoji[m]).join(' ')}`;
+            toggleButtons(false);
+            document.getElementById('play-again-btn').classList.remove('hidden');
+            game_active = false;
+        }
+
+        function resetGame() {
+            ai.reset();
+            player_moves = [];
+            ai_moves = [];
+            game_active = true;
+            toggleButtons(true);
+            document.getElementById('play-again-btn').classList.add('hidden');
+            updateUI('Choose ✊, ✋, or ✌️ within 3 seconds!');
+            document.getElementById('patterns').innerText = '';
+            document.querySelectorAll('.balloon').forEach(b => b.remove());
+            startTimer();
+        }
+
+        function triggerCelebration() {
+            confetti({
+                particleCount: 100,
+                spread: 70,
+                origin: { y: 0.6 },
+                colors: ['#fff', '#ccc', '#999']
+            });
+            setTimeout(() => confetti({
+                particleCount: 100,
+                spread: 90,
+                origin: { y: 0.8 },
+                colors: ['#fff', '#ccc', '#999']
+            }), 500);
+
+            for (let i = 0; i < 10; i++) {
+                const balloon = document.createElement('div');
+                balloon.className = 'balloon';
+                balloon.style.left = `${Math.random() * 100}vw`;
+                balloon.style.animationDelay = `${Math.random() * 3}s`;
+                document.body.appendChild(balloon);
+                setTimeout(() => balloon.remove(), 6000);
+            }
+        }
+
+        // Initialize game
+        resetGame();
+    </script>
+</body>
+</html>
